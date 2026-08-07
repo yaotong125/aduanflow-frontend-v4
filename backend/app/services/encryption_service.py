@@ -28,7 +28,7 @@ class EncryptionService:
     def mask_account(self, account_no: str) -> str:
         """Mask account number showing only last 4 digits."""
         if not account_no or len(account_no) < 4:
-            return "****"
+            return "Not found"
         return f"****{account_no[-4:]}"
 
 encryption_service = EncryptionService()

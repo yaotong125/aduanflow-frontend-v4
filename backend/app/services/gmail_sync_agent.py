@@ -245,7 +245,7 @@ class GmailSyncAgent:
                         email_subject=subject,
                         sender_name=sender_name,
                         attachments=attachments,
-                        fallback_amount=1500.00,
+                        fallback_amount=0.0,
                     )
                     entities = intake["entities"]
                     customer_name = entities["customer_name"]
