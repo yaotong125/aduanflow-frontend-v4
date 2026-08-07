@@ -128,31 +128,42 @@ class IntakeAgent:
             "You are Rhea, the Ingestion & Security Agent in an AI Banking Dispute Automation Taskforce.\n"
             "You process incoming customer complaint emails for a Malaysian bank.\n\n"
             "YOUR TOOLS:\n"
-            "- `pdf_extract`: Call this tool when a PDF attachment is available to read its content.\n"
-            "  It returns the full text of the PDF (bank statement, evidence document, etc.).\n\n"
+            "- `pdf_extract`: Call this ONLY when ATTACHMENT AVAILABLE says YES and you need the raw PDF content.\n\n"
             "YOUR WORKFLOW:\n"
-            "1. Read the EMAIL BODY carefully first! It often contains the main dispute details (amount, account number, date).\n"
-            "2. If ATTACHMENT AVAILABLE says YES, call the `pdf_extract` tool immediately to read it for supplementary evidence.\n"
-            "3. Combine and reconcile ALL information from BOTH the email body AND the PDF text to extract the structured fields.\n"
-            "4. Output ONLY a single JSON object with NO markdown, NO backticks, NO explanation.\n\n"
-            f"TEAM CONTEXT (expert team SOP):\n{sop_context}\n\n"
-            "EXTRACTION RULES:\n"
-            "- customer_name: Full name from email signature or sender. If not found, use sender name.\n"
-            "- account_number: Full 10-12 digit number, or last 4 digits if only partial given.\n"
-            "- card_number: Full card number or last 4 digits. null if not mentioned.\n"
-            "- nric: Malaysian format dddddd-dd-dddd. null if not found.\n"
-            "- amount: Numeric only, no RM or $, no commas. Extract from BOTH the email body and PDF.\n"
-            "- incident_date: YYYY-MM-DD format. Extract from the email body or PDF. null if not found.\n"
-            "- used_tools: List of tool names you called (e.g. [\"pdf_extract\"]) or [] if none.\n\n"
-            f"REQUIRED OUTPUT FORMAT (JSON only):\n{_ENTITY_JSON_SCHEMA}"
+            "1. Read EVERY WORD of the EMAIL BODY carefully. The amount is almost always there.\n"
+            "2. If PDF TEXT is provided below, read it too for supplementary evidence.\n"
+            "3. If ATTACHMENT AVAILABLE says YES and you still need more detail, call `pdf_extract`.\n"
+            "4. Output ONLY a single JSON object. NO markdown fences, NO explanation, NO backticks.\n\n"
+            "EXTRACTION RULES (be extremely precise):\n"
+            "- amount: Look for patterns like 'RM 300', 'RM300', 'MYR 1,450.00', 'MYR1450', '$ 300', '300.00'.\n"
+            "  Strip ALL non-numeric chars except the decimal point. E.g. 'RM 1,450.00' → 1450.00, 'RM 300' → 300.0.\n"
+            "  NEVER return 0 or null if you can find any monetary value in the text.\n"
+            "- account_number: Full 10-12 digit number, or 'ending in XXXX' style → extract just the digits.\n"
+            "- card_number: Full card or last 4 digits. null if not mentioned.\n"
+            "- nric: Malaysian format dddddd-dd-dddd only. null if not found.\n"
+            "- customer_name: Full name from email signature or sender header. Use sender name if nothing else.\n"
+            "- incident_date: YYYY-MM-DD format. null if not found.\n"
+            f"REQUIRED JSON FORMAT:\n{_ENTITY_JSON_SCHEMA}"
         )
+
+        # Always include pre-extracted PDF text in the user prompt so AI has full context
+        pdf_context_section = ""
+        if pdf_text_preextracted:
+            pdf_context_section = (
+                f"\n\nPDF ATTACHMENT TEXT (pre-extracted for you — read this carefully):\n"
+                f"{'='*60}\n"
+                f"{pdf_text_preextracted[:5000]}\n"
+                f"{'='*60}"
+            )
+
         user_prompt = (
             f"SENDER NAME (from email header): {sender_name}\n"
             f"EMAIL SUBJECT: {email_subject}\n\n"
             "EMAIL BODY:\n"
-            f"{email_body}\n\n"
-            f"ATTACHMENT AVAILABLE: {'YES (' + pdf_name + ') — CALL pdf_extract NOW to read it' if pdf_bytes else 'NO'}\n"
-            f"FALLBACK AMOUNT (use only if amount not found anywhere): {fallback_amount}"
+            f"{email_body}"
+            f"{pdf_context_section}\n\n"
+            f"ATTACHMENT AVAILABLE: {'YES (' + pdf_name + ') — call pdf_extract if you need raw bytes' if pdf_bytes else 'NO'}\n"
+            f"NOTE: If you found the amount in the text above, return it directly. DO NOT return 0 or null for amount if any monetary value exists in the text."
         )
 
         used_tools: List[str] = []
@@ -207,25 +218,32 @@ class IntakeAgent:
 
     def _plain_extract(self, email_body, email_subject, sender_name, pdf_text, fallback_amount) -> Dict[str, Any]:
         """Single-shot non-tool extraction used as a fallback (no function calling)."""
-        content = email_body
+        content = (
+            f"EMAIL SUBJECT: {email_subject}\n\n"
+            f"EMAIL BODY:\n{email_body}"
+        )
         if pdf_text:
-            content += "\n\n--- PDF ATTACHMENT TEXT ---\n" + pdf_text[:4000]
+            content += (
+                f"\n\nPDF ATTACHMENT TEXT:\n"
+                f"{'='*60}\n{pdf_text[:4000]}\n{'='*60}"
+            )
 
         system_prompt = (
-            "You are an OCR/document-parsing agent for a banking dispute automation system.\n"
-            "Extract structured fields from BOTH the customer complaint email body AND any attached PDF text.\n"
-            "Think step-by-step, carefully identify Malaysian NRIC numbers, account numbers, and amounts.\n"
-            "Remove 'RM' or '$' from amounts. Return ONLY valid JSON (no markdown, no backticks, no explanation).\n\n"
-            "Fields to extract:\n"
-            "- customer_name: full name of complainant (from signature or sender header)\n"
-            "- account_number: full account number digits, or last 4 digits, or null\n"
-            "- card_number: full card number or 4-digit ending, or null\n"
+            "You are a financial dispute extraction agent. Extract structured data from the email and PDF text below.\n"
+            "CRITICAL: Find the DISPUTE AMOUNT. Look for:\n"
+            "  - 'RM 300', 'RM300', 'MYR 1,450.00', 'MYR1450' → strip RM/MYR and commas → return as float\n"
+            "  - 'Transaction Amount: 300' or 'amount of 300' → return 300.0\n"
+            "  - NEVER return 0 or null for amount if any monetary value exists in the text.\n\n"
+            "Other fields:\n"
+            "- customer_name: complainant full name (from email signature or sender)\n"
+            "- account_number: digits only (10-12 digits or last 4), or null\n"
+            "- card_number: full or last 4 digits, or null\n"
             "- nric: dddddd-dd-dddd format only, or null\n"
-            "- amount: numeric MYR value, no symbol (e.g. 620.00), or null\n"
             "- incident_date: YYYY-MM-DD, or null\n\n"
-            f"Response format: {_ENTITY_JSON_SCHEMA}"
+            "Return ONLY valid JSON. No markdown, no backticks, no explanation.\n"
+            f"Format: {_ENTITY_JSON_SCHEMA}"
         )
-        data = generate_json(system_prompt, f"Sender: {sender_name}\nSubject: {email_subject}\n\n{content}")
+        data = generate_json(system_prompt, f"Sender: {sender_name}\n\n{content}")
         if data and isinstance(data, dict):
             logger.info(f"[IntakeAgent] Plain extraction succeeded: {list(data.keys())}")
             return data
