@@ -12,8 +12,17 @@ const ACTOR_COLORS = {
   'Financial Agent':      'bg-green-100 text-green-700 border-green-200',
   'Comms Agent':          'bg-cyan-100 text-cyan-700 border-cyan-200',
   'Gmail Sync Agent':     'bg-indigo-100 text-indigo-700 border-indigo-200',
-  'System':               'bg-slate-100 text-slate-600 border-slate-200',
 };
+
+function formatUTC(dateString, options) {
+  if (!dateString) return '—';
+  // If it's old legacy time-only format, just return it
+  if (!dateString.includes('-')) return dateString;
+  let str = dateString.replace(' ', 'T');
+  const withZ = str.endsWith('Z') ? str : str + 'Z';
+  const date = new Date(withZ);
+  return isNaN(date) ? dateString : date.toLocaleString('en-MY', options);
+}
 
 const ACTOR_DOT = {
   'Email MCP':            'bg-blue-500',
@@ -89,7 +98,7 @@ export default function AuditLog({ cases = [], fetchCases }) {
           action:     entry.action,
           detail:     entry.detail,
           created_at: null,  // JSON blobs have no ISO timestamp
-          _time:      entry.time,  // HH:MM:SS string from blob
+          _time:      formatUTC(entry.time, { dateStyle: 'medium', timeStyle: 'short' }),
         }))
       ),
     [cases]
@@ -105,9 +114,7 @@ export default function AuditLog({ cases = [], fetchCases }) {
         action:     row.action,
         detail:     row.detail || '',
         created_at: row.created_at,
-        _time:      row.created_at
-          ? new Date(row.created_at).toLocaleTimeString('en-MY', { hour12: false })
-          : '—',
+        _time:      formatUTC(row.created_at, { dateStyle: 'medium', timeStyle: 'short' }),
         _fromDb: true,
       })),
     [dbLogs]

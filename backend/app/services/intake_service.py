@@ -57,7 +57,8 @@ class IntakeService:
         email_body: str,
         attachment_name: Optional[str] = None,
         card_number: Optional[str] = None,
-        received_at: Optional[datetime] = None
+        received_at: Optional[datetime] = None,
+        incident_date: Optional[str] = None
     ) -> Case:
         """
         Processes complaint intake through the 5-stage AI expert pipeline:
@@ -89,7 +90,7 @@ class IntakeService:
                 "account_reference": masked_acc,
                 "card_reference": masked_card or "None",
                 "dispute_amount": amount,
-                "incident_date": (datetime.utcnow() - timedelta(days=2)).strftime("%Y-%m-%d"),
+                "incident_date": incident_date or "Not specified",
                 "attachment_processed": attachment_name or "None"
             }
         }

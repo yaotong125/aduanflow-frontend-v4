@@ -249,9 +249,9 @@ class GmailSyncAgent:
                     )
                     entities = intake["entities"]
                     customer_name = entities["customer_name"]
-                    account_no = entities["account_number"] or "114002938471"
-                    card_no = entities["card_number"]
-                    nric_val = entities["nric"] or "930214-08-5193"
+                    account_no = entities.get("account_number") or ""
+                    card_no = entities.get("card_number")
+                    nric_val = entities.get("nric") or ""
                     amount_val = entities["amount"]
 
                     # Pass through the 5-Stage Agentic AI Pipeline
@@ -266,6 +266,7 @@ class GmailSyncAgent:
                         attachment_name="Complaint_Evidence.pdf",
                         card_number=card_no,
                         received_at=email_date,
+                        incident_date=entities.get("incident_date"),
                     )
                     session.add(case_obj)
 
