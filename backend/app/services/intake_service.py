@@ -180,8 +180,7 @@ class IntakeService:
                 communication["outboundDispatchError"] = str(e)
 
         # 5. Audit Trail Construction — 5-Stage AI Expert Pipeline Trace
-        # Use Malaysia Time (UTC+8) for the audit logs display
-        now_ts = (datetime.utcnow() + timedelta(hours=8)).strftime("%Y-%m-%d %H:%M:%S")
+        now_ts = datetime.utcnow().isoformat() + "Z"
         audit_log = [
             {
                 "time": now_ts,

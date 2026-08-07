@@ -465,7 +465,7 @@ export default function CaseDetail({ caseData, onBack }) {
                   <div className="w-3 h-3 rounded-full bg-blue-500 flex-shrink-0 mt-1.5 ring-2 ring-blue-100" />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-                      <span className="text-xs font-mono text-slate-500">{entry.time}</span>
+                      <span className="text-xs font-mono text-slate-500">{formatUTC(entry.time, { timeStyle: 'short' })}</span>
                       <span className="text-xs font-medium text-blue-600">{entry.actor}</span>
                     </div>
                     <p className="text-sm text-slate-700">{entry.action}</p>
