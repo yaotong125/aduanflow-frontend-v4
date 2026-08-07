@@ -15,6 +15,13 @@ const PIPELINE_STEPS = [
   { key: 'communication', label: 'Communication', Icon: IconSend, desc: 'Response' },
 ];
 
+// Helper to ensure naive database timestamps are correctly parsed as UTC
+function formatUTC(dateString, options) {
+  if (!dateString) return 'N/A';
+  const withZ = dateString.endsWith('Z') ? dateString : dateString + 'Z';
+  return new Date(withZ).toLocaleString('en-MY', options);
+}
+
 function getStepStatus(stepKey, caseData) {
   const auditActions = (caseData.auditLog || []).map((a) => a.action.toLowerCase());
   // Use startsWith to avoid substring false-positives (e.g. 'reversal' inside 'auto-reversal')
@@ -227,8 +234,7 @@ export default function CaseDetail({ caseData, onBack }) {
         <div className="bg-white rounded-xl border border-slate-200 shadow-card p-4">
           <p className="text-xs uppercase tracking-wider text-slate-500 font-medium">SLA Deadline</p>
           <p className="text-sm font-semibold text-slate-800 mt-0.5">
-            {caseData.dueDate ? new Date(caseData.dueDate).toLocaleDateString('en-MY', { day: 'numeric', month: 'short' }) : 'N/A'}
-
+            {formatUTC(caseData.dueDate, { day: 'numeric', month: 'short' })}
           </p>
           <p className="text-xs text-slate-500">{caseData.classification?.slaHours || '—'}h window</p>
         </div>
@@ -276,7 +282,7 @@ export default function CaseDetail({ caseData, onBack }) {
                     </div>
                     <div className="flex gap-2">
                       <span className="text-slate-500 font-medium w-12 shrink-0">Date:</span>
-                      <span className="text-slate-700">{new Date(caseData.receivedAt).toLocaleString('en-MY', { dateStyle: 'medium', timeStyle: 'short' })}</span>
+                      <span className="text-slate-700">{formatUTC(caseData.receivedAt, { dateStyle: 'medium', timeStyle: 'short' })}</span>
                     </div>
                     <div className="flex gap-2">
                       <span className="text-slate-500 font-medium w-12 shrink-0">Subject:</span>
@@ -405,7 +411,7 @@ export default function CaseDetail({ caseData, onBack }) {
                 <div className="text-right text-xs text-emerald-800 shrink-0 font-mono bg-white/80 px-3 py-1.5 rounded-lg border border-emerald-200">
                   <p className="font-bold text-emerald-700">STATUS: DELIVERED (HTTP 200)</p>
                   <p className="text-[11px] text-slate-500 mt-0.5">
-                    {new Date(caseData.communication?.finalResponse?.sentAt || caseData.receivedAt).toLocaleString('en-MY', { dateStyle: 'short', timeStyle: 'short' })}
+                    {formatUTC(caseData.communication?.finalResponse?.sentAt || caseData.receivedAt, { dateStyle: 'short', timeStyle: 'short' })}
                   </p>
                 </div>
               </div>
@@ -424,7 +430,7 @@ export default function CaseDetail({ caseData, onBack }) {
                     </div>
                     <div className="flex gap-2">
                       <span className="text-slate-500 font-medium w-10 shrink-0">Date:</span>
-                      <span className="text-slate-700">{new Date(caseData.communication.finalResponse?.sentAt || caseData.receivedAt).toLocaleString('en-MY', { dateStyle: 'medium', timeStyle: 'short' })}</span>
+                      <span className="text-slate-700">{formatUTC(caseData.communication.finalResponse?.sentAt || caseData.receivedAt, { dateStyle: 'medium', timeStyle: 'short' })}</span>
                     </div>
                     <div className="flex gap-2">
                       <span className="text-slate-500 font-medium w-10 shrink-0">Subject:</span>
