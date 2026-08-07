@@ -1,0 +1,41 @@
+{
+  "mcpServers": {
+    "gmail_intake_mcp": {
+      "url": "http://127.0.0.1:8000/api/mcp",
+      "transport": "http",
+      "description": "Gmail Complaints Mailbox OAuth 2.0 Ingestion & Real Outbound Email Dispatch Server",
+      "tools": [
+        {
+          "name": "gmail_poll_unread",
+          "description": "Query connected Gmail complaints mailbox for unread dispute emails and pipe them through the 5-stage AI dispute pipeline."
+        }
+      ]
+    },
+    "core_banking_mcp": {
+      "url": "http://127.0.0.1:8000/api/mcp",
+      "transport": "http",
+      "description": "Core Banking Ledger, ATM Switch & CRM Evidence Verification Server",
+      "tools": [
+        {
+          "name": "verify_banking_evidence",
+          "description": "Cross-reference dispute parameters against core banking logs, switch journals, ATM records, and CRM."
+        },
+        {
+          "name": "query_core_ledger",
+          "description": "Fetch real transaction ledger logs for an account number from the case database."
+        }
+      ]
+    },
+    "financial_resolution_mcp": {
+      "url": "http://127.0.0.1:8000/api/mcp",
+      "transport": "http",
+      "description": "Autonomous Financial Resolution & Journal Entry Posting Engine",
+      "tools": [
+        {
+          "name": "post_journal_entry",
+          "description": "Generate double-entry GL journal vouchers (JE-2026-XXXX) for credit reversals."
+        }
+      ]
+    }
+  }
+}

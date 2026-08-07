@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+backend/__pycache__/
+*.pyc
+
+# Environment files & secrets
+.env
+.env.local
+.env.*.local
+*.pem
+
+# Build outputs & Databases
+dist/
+build/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Local agent/tooling dirs (dev only, not product code)
+.agent/
+.agents/
+
+# OS & Temp files
+.DS_Store
+Thumbs.db
+scratch/

@@ -1,0 +1,139 @@
+{
+  "name": "dispute-automation-expert-team",
+  "version": "1.0.0",
+  "description": "Autonomous banking dispute automation team for intake, compliance, verification, settlement, and customer communication under BNM and FMOS frameworks.",
+  "author": {
+    "name": "WorkBuddy AI",
+    "email": "noreply@workbuddy.ai"
+  },
+  "agents": [
+    "./agents/dispute-automation-expert-team-team-lead.md",
+    "./agents/ingestion-security-agent.md",
+    "./agents/classification-compliance-agent.md",
+    "./agents/verification-resolution-agent.md",
+    "./agents/comm-dashboard-agent.md"
+  ],
+  "skills": [
+    "./skills/bnm-fmos-compliance-governor",
+    "./skills/dispute-classifier-metadata-enricher",
+    "./skills/core-system-mcp-verifier",
+    "./skills/autonomous-financial-resolution-engine",
+    "./skills/dispute-analytics-dashboard-sync"
+  ],
+  "expertType": "team",
+  "agentName": "dispute-automation-expert-team-team-lead",
+  "teamInfo": {
+    "leadAgent": "dispute-automation-expert-team-team-lead",
+    "memberAgents": [
+      "ingestion-security-agent",
+      "classification-compliance-agent",
+      "verification-resolution-agent",
+      "comm-dashboard-agent"
+    ]
+  },
+  "displayName": {
+    "en": "AI Banking Dispute Automation Taskforce",
+    "zh": "AI银行争议自动化特遣队"
+  },
+  "profession": {
+    "en": "AI Banking Dispute Automation Taskforce",
+    "zh": "AI银行争议自动化特遣队"
+  },
+  "displayDescription": {
+    "en": "A multi-agent banking dispute taskforce that automates intake, compliance, verification, settlement, and customer updates within regulatory deadlines.",
+    "zh": "面向银行争议处理场景，联动受理、合规、核验、清算与通知流程，实现端到端自动化闭环处置"
+  },
+  "avatar": "avatars/team.png",
+  "categoryId": "08-FinanceInvestment",
+  "defaultInitPrompt": {
+    "zh": "帮我搭建一条符合BNM与FMOS要求的银行争议自动化处理流水线。",
+    "en": "Help me run a BNM- and FMOS-compliant automated banking dispute pipeline."
+  },
+  "plugin": "dispute-automation-expert-team",
+  "tags": [
+    { "en": "Banking Disputes", "zh": "银行争议" },
+    { "en": "BNM Compliance", "zh": "BNM合规" },
+    { "en": "Automated Resolution", "zh": "自动化处置" }
+  ],
+  "quickPrompts": [
+    {
+      "en": "Help me run a BNM- and FMOS-compliant automated banking dispute pipeline.",
+      "zh": "帮我搭建一条符合BNM与FMOS要求的银行争议自动化处理流水线。"
+    },
+    {
+      "en": "Design the end-to-end workflow for complaint intake, verification, settlement, and notification.",
+      "zh": "设计一条覆盖受理、核验、清算与通知的银行投诉自动化流程。"
+    },
+    {
+      "en": "Show me how this team handles PASS, FAIL, and manual-review dispute cases.",
+      "zh": "展示这个团队如何处理PASS、FAIL与人工复核三类争议案件。"
+    }
+  ],
+  "members": [
+    {
+      "id": "dispute-automation-expert-team-team-lead",
+      "displayName": {
+        "en": "Dispute Pipeline Orchestrator",
+        "zh": "争议流程编排官"
+      },
+      "profession": {
+        "en": "Dispute Automation Director",
+        "zh": "争议自动化总监"
+      },
+      "avatar": "avatars/dispute-automation-expert-team-team-lead.png",
+      "role": "lead"
+    },
+    {
+      "id": "ingestion-security-agent",
+      "displayName": {
+        "en": "Ingestion Security Agent",
+        "zh": "受理安全专员"
+      },
+      "profession": {
+        "en": "Lead Ingestion & Security",
+        "zh": "受理与安全负责人"
+      },
+      "avatar": "avatars/ingestion-security-agent.png",
+      "role": "member"
+    },
+    {
+      "id": "classification-compliance-agent",
+      "displayName": {
+        "en": "Classification Compliance Agent",
+        "zh": "分类合规治理官"
+      },
+      "profession": {
+        "en": "Classifier & Compliance Governor",
+        "zh": "分类与合规治理官"
+      },
+      "avatar": "avatars/classification-compliance-agent.png",
+      "role": "member"
+    },
+    {
+      "id": "verification-resolution-agent",
+      "displayName": {
+        "en": "Verification Resolution Agent",
+        "zh": "核验清算执行官"
+      },
+      "profession": {
+        "en": "Verification & Financial Resolution",
+        "zh": "核验与资金处置官"
+      },
+      "avatar": "avatars/verification-resolution-agent.png",
+      "role": "member"
+    },
+    {
+      "id": "comm-dashboard-agent",
+      "displayName": {
+        "en": "Comm Dashboard Agent",
+        "zh": "沟通看板协调官"
+      },
+      "profession": {
+        "en": "Communication & Dashboard Operations",
+        "zh": "沟通与看板运营官"
+      },
+      "avatar": "avatars/comm-dashboard-agent.png",
+      "role": "member"
+    }
+  ]
+}
