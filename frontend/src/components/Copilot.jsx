@@ -16,20 +16,67 @@ function TypingIndicator() {
 }
 
 function renderBoldLine(line) {
-  const parts = line.split(/\*\*(.*?)\*\*/g);
-  return parts.map((part, j) =>
-    j % 2 === 1 ? <strong key={j}>{part}</strong> : part
-  );
+  // Handle inline code first
+  const codeParts = line.split(/`(.*?)`/g);
+  return codeParts.map((part, i) => {
+    if (i % 2 === 1) {
+      return <code key={`code-${i}`} className="bg-slate-200 text-slate-800 px-1.5 py-0.5 rounded text-xs font-mono">{part}</code>;
+    }
+    // Then handle bold
+    const boldParts = part.split(/\*\*(.*?)\*\*/g);
+    return boldParts.map((bp, j) =>
+      j % 2 === 1 ? <strong key={`bold-${i}-${j}`}>{bp}</strong> : bp
+    );
+  });
 }
 
 function BotMessage({ text }) {
+  const lines = text.split('\n');
+  
   return (
-    <div className="whitespace-pre-line bg-slate-50 text-slate-700 border-l-3 border-blue-500 rounded-xl px-4 py-3 max-w-[85%]">
-      {text.split('\n').map((line, i) => (
-        <p key={i} className={`${i > 0 ? 'mt-1' : ''} text-sm`}>
-          {renderBoldLine(line)}
-        </p>
-      ))}
+    <div className="bg-slate-50 text-slate-700 border-l-3 border-blue-500 rounded-xl px-4 py-3 max-w-[85%] space-y-1.5 shadow-sm">
+      {lines.map((line, i) => {
+        if (!line.trim()) return null; // skip empty lines
+
+        // Headers
+        if (line.startsWith('### ')) {
+          return <h3 key={i} className="text-sm font-bold text-slate-900 mt-2">{renderBoldLine(line.replace('### ', ''))}</h3>;
+        }
+        if (line.startsWith('## ')) {
+          return <h2 key={i} className="text-base font-bold text-slate-900 mt-3 border-b border-slate-200 pb-1">{renderBoldLine(line.replace('## ', ''))}</h2>;
+        }
+        if (line.startsWith('# ')) {
+          return <h1 key={i} className="text-lg font-bold text-slate-900 mt-3">{renderBoldLine(line.replace('# ', ''))}</h1>;
+        }
+
+        // Bullet points
+        if (line.startsWith('- ') || line.startsWith('* ')) {
+          return (
+            <div key={i} className="flex gap-2 text-sm ml-2">
+              <span className="text-blue-500 font-bold shrink-0">•</span>
+              <div>{renderBoldLine(line.substring(2))}</div>
+            </div>
+          );
+        }
+
+        // Numbered list
+        const numberMatch = line.match(/^(\d+\.)\s(.*)/);
+        if (numberMatch) {
+          return (
+            <div key={i} className="flex gap-2 text-sm ml-2">
+              <span className="text-blue-500 font-bold shrink-0">{numberMatch[1]}</span>
+              <div>{renderBoldLine(numberMatch[2])}</div>
+            </div>
+          );
+        }
+
+        // Regular paragraph
+        return (
+          <p key={i} className="text-sm leading-relaxed">
+            {renderBoldLine(line)}
+          </p>
+        );
+      })}
     </div>
   );
 }

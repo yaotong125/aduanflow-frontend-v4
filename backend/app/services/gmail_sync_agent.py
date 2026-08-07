@@ -237,8 +237,9 @@ class GmailSyncAgent:
                         body_text = re.sub(r'<[^>]+>', ' ', body_text)
                         # Unescape HTML entities like &nbsp;
                         body_text = html.unescape(body_text)
-                        # Clean up multiple spaces and newlines
-                        body_text = re.sub(r'\s+', ' ', body_text).strip()
+                        # Clean up multiple spaces but PRESERVE newlines
+                        body_text = re.sub(r'[ \t]+', ' ', body_text)
+                        body_text = re.sub(r'\n\s*\n', '\n\n', body_text).strip()
 
                     # Determine whether this is a genuine banking dispute case first
                     if not classification_service.is_actual_dispute(from_email, subject, body_text):
