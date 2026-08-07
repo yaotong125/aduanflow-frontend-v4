@@ -8,6 +8,17 @@ from backend.app.services.plugin_context import build_team_sop
 
 logger = logging.getLogger("aduanflow")
 
+# The JSON schema the agent must produce as its final answer
+_ENTITY_JSON_SCHEMA = (
+    '{"customer_name": "<name or null>", '
+    '"account_number": "<full account number digits or null>", '
+    '"card_number": "<full card number or 4-digit ending, or null>", '
+    '"nric": "<dddddd-dd-dddd or null>", '
+    '"amount": <number or null>, '
+    '"incident_date": "<YYYY-MM-DD or null>", '
+    '"used_tools": ["<tool names called>"]}'
+)
+
 
 class IntakeAgent:
     """
@@ -24,23 +35,20 @@ class IntakeAgent:
     AGENT_NAME = "ingestion-security-agent"
 
     def pdf_extract(self, attachment_bytes: bytes = b"", filename: str = "") -> str:
-        """Extract text from a PDF attachment (bank statement or evidence document)."""
+        """Extract text from a PDF bank statement or evidence attachment.
+
+        Call this tool when a PDF attachment is available to read its text content.
+        Returns the extracted text or an error message if extraction fails.
+        """
         text = pdf_text_from_bytes(attachment_bytes)
         if not text:
-            return "PDF contained no extractable text (may be a scanned image; OCR unavailable) or file was empty."
+            return "PDF contained no extractable text (scanned image; OCR unavailable) or file was empty."
+        logger.info(f"[IntakeAgent] pdf_extract: extracted {len(text)} chars from '{filename}'")
         return text[:6000]
 
     def build_tool_catalog(self) -> List[Callable]:
         """Return the python callables exposed to the LLM as tools."""
         return [self.pdf_extract]
-
-    def _execute_tool(self, name: str, args: dict) -> str:
-        """Dispatch an LLM-requested tool call to the matching implementation."""
-        if name in ("pdf_extract", "_tool_pdf_extract"):  # accept both names defensively
-            pdf_bytes = args.get("attachment_bytes") or args.get("attachment") or b""
-            filename = args.get("filename", "")
-            return self.pdf_extract(pdf_bytes, filename)
-        return f"Unknown tool '{name}'"
 
     def _security_scan(self, email_body: str, subject: str) -> Dict[str, Any]:
         """Lightweight prompt-injection scan on raw intake text (rule-based + optional AI)."""
@@ -90,78 +98,106 @@ class IntakeAgent:
                 pdf_name = att.get("filename") or "attachment.pdf"
                 break
 
+        # Pre-extract PDF text so it's available for both agentic and fallback paths
+        pdf_text_preextracted = ""
+        if pdf_bytes:
+            try:
+                pdf_text_preextracted = pdf_text_from_bytes(pdf_bytes)
+                if pdf_text_preextracted:
+                    logger.info(f"[IntakeAgent] Pre-extracted {len(pdf_text_preextracted)} chars from PDF '{pdf_name}'")
+                else:
+                    logger.warning(f"[IntakeAgent] PDF '{pdf_name}' yielded no text (scanned or empty)")
+            except Exception as pdf_err:
+                logger.error(f"[IntakeAgent] PDF pre-extraction error: {pdf_err}")
+
         if not email_body or not email_body.strip():
             return {
                 "entities": self._default_entities(sender_name, fallback_amount),
                 "security": {"has_security_flags": False, "flags": [], "assessment": "empty intake"},
-                "attachment_text": "",
+                "attachment_text": pdf_text_preextracted[:6000],
                 "used_tools": [],
             }
 
         # Security scan first (pure, no LLM needed).
         security = self._security_scan(email_body, email_subject)
 
-        # Agentic extraction loop with the pdf_extract tool available.
+        sop_context = self.agent_context()
+
+        # Build the system prompt — tool name MUST match the registered function name exactly
         system_prompt = (
             "You are Rhea, the Ingestion & Security Agent in an AI Banking Dispute Automation Taskforce.\n"
-            "You process incoming customer complaint emails for a bank.\n"
-            "Your job:\n"
-            "1. Read the complaint email body.\n"
-            "2. If there is a PDF attachment available, call the `_tool_pdf_extract` tool to read it.\n"
-            "3. Extract structured entities accurately.\n"
-            "Use the team SOP as your operating context.\n"
-            f"\n{self.agent_context()}\n"
-            "IMPORTANT INSTRUCTIONS:\n"
-            "Think step by step before outputting JSON. Ensure you extract the exact amount without currency symbols, just the number.\n"
-            "Finally respond with ONLY a single JSON object (no markdown, no backticks):\n"
-            '{"customer_name": "<name or null>", '
-            '"account_number": "<full account number digits or null>", '
-            '"card_number": "<full card number or 4-digit ending, or null>", '
-            '"nric": "<dddddd-dd-dddd or null>", '
-            '"amount": <number or null>, '
-            '"incident_date": "<YYYY-MM-DD or null>", '
-            '"used_tools": ["<tool names called>"]}'
+            "You process incoming customer complaint emails for a Malaysian bank.\n\n"
+            "YOUR TOOLS:\n"
+            "- `pdf_extract`: Call this tool when a PDF attachment is available to read its content.\n"
+            "  It returns the full text of the PDF (bank statement, evidence document, etc.).\n\n"
+            "YOUR WORKFLOW:\n"
+            "1. Read the EMAIL BODY carefully.\n"
+            "2. If ATTACHMENT AVAILABLE says YES, call the `pdf_extract` tool immediately to read it.\n"
+            "3. Using all available information (email body + PDF text), extract the structured fields.\n"
+            "4. Output ONLY a single JSON object with NO markdown, NO backticks, NO explanation.\n\n"
+            f"TEAM CONTEXT (expert team SOP):\n{sop_context}\n\n"
+            "EXTRACTION RULES:\n"
+            "- customer_name: Full name from email signature or sender. If not found, use sender name.\n"
+            "- account_number: Full 10-12 digit number, or last 4 digits if only partial given.\n"
+            "- card_number: Full card number or last 4 digits. null if not mentioned.\n"
+            "- nric: Malaysian format dddddd-dd-dddd. null if not found.\n"
+            "- amount: Numeric only, no RM or $, no commas. Extract from body or PDF.\n"
+            "- incident_date: YYYY-MM-DD format. null if not found.\n"
+            "- used_tools: List of tool names you called (e.g. [\"pdf_extract\"]) or [] if none.\n\n"
+            f"REQUIRED OUTPUT FORMAT (JSON only):\n{_ENTITY_JSON_SCHEMA}"
         )
         user_prompt = (
-            f"SENDER (from email header): {sender_name}\n"
+            f"SENDER NAME (from email header): {sender_name}\n"
             f"EMAIL SUBJECT: {email_subject}\n\n"
             "EMAIL BODY:\n"
             f"{email_body}\n\n"
-            f"ATTACHMENT AVAILABLE: {'YES (' + pdf_name + ')' if pdf_bytes else 'NO'}\n"
-            f"FALLBACK AMOUNT IF NOT FOUND IN TEXT: {fallback_amount}"
+            f"ATTACHMENT AVAILABLE: {'YES (' + pdf_name + ') — CALL pdf_extract NOW to read it' if pdf_bytes else 'NO'}\n"
+            f"FALLBACK AMOUNT (use only if amount not found anywhere): {fallback_amount}"
         )
 
         used_tools: List[str] = []
-        # We need to pass pdf_bytes into the tool call. The model cannot pass binary;
-        # we make it available to the tool via closure.
+
+        # Closure captures pdf_bytes so the model doesn't need to pass binary arguments
         def execute_tool(name, args):
-            if name in ("pdf_extract", "_tool_pdf_extract"):  # accept both names defensively
+            if name in ("pdf_extract", "_tool_pdf_extract"):
                 used_tools.append("pdf_extract")
-                # Force our captured bytes regardless of model-supplied dummy args.
-                return self.pdf_extract(pdf_bytes, pdf_name)
-            return f"Unknown tool '{name}'"
+                result = self.pdf_extract(pdf_bytes, pdf_name)
+                logger.info(f"[IntakeAgent] Tool 'pdf_extract' executed → {len(result)} chars returned")
+                return result
+            logger.warning(f"[IntakeAgent] Unknown tool requested: '{name}'")
+            return f"Unknown tool '{name}'. Available tools: pdf_extract"
 
         final_text = generate_content_with_tools(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             tools=self.build_tool_catalog(),
             execute_tool=execute_tool,
-            max_turns=4,
+            max_turns=6,  # increased from 4 to allow tool → response → final answer cycle
         )
 
         entities = None
         if final_text:
             entities = parse_json_response(final_text)
+            if entities:
+                logger.info(f"[IntakeAgent] Agentic extraction succeeded: {list(entities.keys())}")
+            else:
+                logger.warning(f"[IntakeAgent] Agentic final text could not be parsed as JSON: {final_text[:200]}")
+
         if not entities:
-            # Fallback: plain single-shot JSON call (no tools) so the pipeline never hard-crashes.
-            entities = self._plain_extract(email_body, email_subject, sender_name, pdf_text=(pdf_text_from_bytes(pdf_bytes) if pdf_bytes else ""), fallback_amount=fallback_amount)
+            # Fallback: plain single-shot JSON call with both email AND pre-extracted PDF text
+            logger.info("[IntakeAgent] Falling back to plain JSON extraction (no tool calling)")
+            entities = self._plain_extract(
+                email_body, email_subject, sender_name,
+                pdf_text=pdf_text_preextracted,
+                fallback_amount=fallback_amount
+            )
 
         entities = self._normalize(entities, sender_name, fallback_amount)
 
         return {
             "entities": entities,
             "security": security,
-            "attachment_text": pdf_text_from_bytes(pdf_bytes)[:6000] if pdf_bytes else "",
+            "attachment_text": pdf_text_preextracted[:6000],
             "used_tools": used_tools or self._detect_used_tools(final_text),
         }
 
@@ -173,22 +209,28 @@ class IntakeAgent:
         """Single-shot non-tool extraction used as a fallback (no function calling)."""
         content = email_body
         if pdf_text:
-            content += "\n\n--- PDF ATTACHMENT TEXT ---\n" + pdf_text
+            content += "\n\n--- PDF ATTACHMENT TEXT ---\n" + pdf_text[:4000]
+
         system_prompt = (
             "You are an OCR/document-parsing agent for a banking dispute automation system.\n"
-            "Extract the following fields from the complaint email and any attached document text.\n"
-            "Think step-by-step and carefully identify numbers and names. Remove any 'RM' or '$' from amount.\n"
-            "Return ONLY JSON (no markdown formatting or backticks).\n"
-            "- customer_name: full name of complainant\n"
-            "- account_number: full account number digits, or null\n"
+            "Extract structured fields from the customer complaint email and any attached PDF text.\n"
+            "Think step-by-step, carefully identify Malaysian NRIC numbers, account numbers, and amounts.\n"
+            "Remove 'RM' or '$' from amounts. Return ONLY valid JSON (no markdown, no backticks, no explanation).\n\n"
+            "Fields to extract:\n"
+            "- customer_name: full name of complainant (from signature or sender header)\n"
+            "- account_number: full account number digits, or last 4 digits, or null\n"
             "- card_number: full card number or 4-digit ending, or null\n"
-            "- nric: dddddd-dd-dddd, or null\n"
-            "- amount: numeric MYR, no symbol (e.g. 620.00), or null\n"
-            "- incident_date: YYYY-MM-DD, or null\n"
-            'Response format: {"customer_name":..., "account_number":..., "card_number":..., "nric":..., "amount":..., "incident_date":...}'
+            "- nric: dddddd-dd-dddd format only, or null\n"
+            "- amount: numeric MYR value, no symbol (e.g. 620.00), or null\n"
+            "- incident_date: YYYY-MM-DD, or null\n\n"
+            f"Response format: {_ENTITY_JSON_SCHEMA}"
         )
         data = generate_json(system_prompt, f"Sender: {sender_name}\nSubject: {email_subject}\n\n{content}")
-        return data if isinstance(data, dict) else {}
+        if data and isinstance(data, dict):
+            logger.info(f"[IntakeAgent] Plain extraction succeeded: {list(data.keys())}")
+            return data
+        logger.warning("[IntakeAgent] Plain extraction also failed — using defaults")
+        return {}
 
     def _normalize(self, data: dict, sender_name: str, fallback_amount: float) -> dict:
         import re

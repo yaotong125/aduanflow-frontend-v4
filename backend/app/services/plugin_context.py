@@ -3,7 +3,14 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-_PLUGIN_DIR = Path(__file__).resolve().parents[3] / "plugins" / "dispute-automation-expert-team"
+
+# Path resolution from backend/app/services/plugin_context.py:
+# parents[0] = backend/app/services/
+# parents[1] = backend/app/
+# parents[2] = backend/           ← plugins/ lives here ✅
+# parents[3] = project root       ← wrong
+_PLUGIN_DIR = Path(__file__).resolve().parents[2] / "plugins" / "dispute-automation-expert-team"
+
 _SKIP_FILES = {"member-placeholder.md"}
 
 
@@ -23,7 +30,9 @@ _sop_cache = None
 def build_team_sop(max_chars=12000):
     """Load agent personas and skill SOPs from the plugin directory into a single context string."""
     global _sop_cache
-    if _sop_cache is not None:
+    # Only use cache if it has actual content — empty string means previous load failed
+    # (e.g. wrong path was used). We retry until content is found.
+    if _sop_cache:
         return _sop_cache
     parts = []
     agents_dir = _PLUGIN_DIR / "agents"

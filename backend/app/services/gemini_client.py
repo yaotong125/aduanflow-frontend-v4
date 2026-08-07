@@ -174,13 +174,15 @@ def generate_content_with_tools(
         if not response.candidates:
             logger.warning("[Gemini] tool-turn response has no candidates (safety filter or empty response). Breaking loop.")
             break
-        for part in response.candidates[0].content.parts:
+        candidate_content = response.candidates[0].content
+        for part in candidate_content.parts:
             if part.function_call is not None:
                 function_calls.append(part.function_call)
 
         if function_calls:
             # Append the model's own response (it carries function_call + thought_signature)
-            contents.append(response.candidates[0].content)
+            contents.append(candidate_content)
+            tool_result_parts = []
             for fc in function_calls:
                 name = fc.name
                 args = dict(fc.args or {})
@@ -191,22 +193,34 @@ def generate_content_with_tools(
                 except Exception as exc:
                     response_text = f"ERROR: {exc}"
                     logger.error(f"[Gemini] Tool execution error for {name}: {exc}")
-                contents.append(
-                    types.Content(
-                        role="user",
-                        parts=[types.Part(function_response=types.FunctionResponse(
-                            name=name,
-                            response={"result": response_text},
-                        ))],
-                    )
+                tool_result_parts.append(
+                    types.Part(function_response=types.FunctionResponse(
+                        name=name,
+                        response={"result": response_text},
+                    ))
                 )
+            contents.append(
+                types.Content(role="user", parts=tool_result_parts)
+            )
             continue  # model continues now that tools returned
 
-        # No tool calls -> the model produced a final answer.
-        text = response.candidates[0].content.parts
-        full_text = "".join((p.text or "") for p in text if getattr(p, "text", None))
+        # No tool calls → the model produced a final answer (or an empty response).
+        text_parts = candidate_content.parts
+        full_text = "".join((p.text or "") for p in text_parts if getattr(p, "text", None))
         if full_text.strip():
             return full_text.strip()
+
+        # Model returned no function calls AND no text — nudge it to produce its final answer
+        logger.warning("[Gemini] Model turn had no function calls and no text. Sending final-answer nudge.")
+        contents.append(candidate_content)
+        contents.append(types.Content(
+            role="user",
+            parts=[types.Part(text=(
+                "You have received all tool results. "
+                "Now provide your final answer as a single JSON object only. "
+                "No markdown, no explanation, just the JSON."
+            ))],
+        ))
 
     logger.warning(f"[Gemini] tool-calling loop exhausted turns (last_error={last_error})")
     return None
