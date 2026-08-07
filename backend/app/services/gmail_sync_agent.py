@@ -193,9 +193,7 @@ class GmailSyncAgent:
                                 if not body_text:
                                     body_text = base64.urlsafe_b64decode(part_body["data"]).decode("utf-8", errors="ignore")
                             elif part_mime == "text/html" and "data" in part_body and not body_text:
-                                html_raw = base64.urlsafe_b64decode(part_body["data"]).decode("utf-8", errors="ignore")
-                                import re
-                                body_text = re.sub(r'<[^>]+>', ' ', html_raw)
+                                body_text = base64.urlsafe_b64decode(part_body["data"]).decode("utf-8", errors="ignore")
                             elif part_mime == "application/pdf" or str(part.get("filename", "")).lower().endswith(".pdf"):
                                 attachment_id = part_body.get("attachmentId")
                                 if attachment_id:
