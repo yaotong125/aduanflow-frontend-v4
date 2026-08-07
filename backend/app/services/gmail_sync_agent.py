@@ -254,6 +254,8 @@ class GmailSyncAgent:
                     nric_val = entities.get("nric") or ""
                     amount_val = entities["amount"]
 
+                    att_name = attachments[0]["filename"] if attachments else None
+
                     # Pass through the 5-Stage Agentic AI Pipeline
                     case_obj = intake_service.process_incoming_complaint(
                         customer_name=customer_name,
@@ -263,7 +265,7 @@ class GmailSyncAgent:
                         amount=amount_val,
                         email_subject=subject,
                         email_body=body_text,
-                        attachment_name="Complaint_Evidence.pdf",
+                        attachment_name=att_name,
                         card_number=card_no,
                         received_at=email_date,
                         incident_date=entities.get("incident_date"),

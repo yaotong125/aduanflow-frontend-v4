@@ -131,9 +131,9 @@ class IntakeAgent:
             "- `pdf_extract`: Call this tool when a PDF attachment is available to read its content.\n"
             "  It returns the full text of the PDF (bank statement, evidence document, etc.).\n\n"
             "YOUR WORKFLOW:\n"
-            "1. Read the EMAIL BODY carefully.\n"
-            "2. If ATTACHMENT AVAILABLE says YES, call the `pdf_extract` tool immediately to read it.\n"
-            "3. Using all available information (email body + PDF text), extract the structured fields.\n"
+            "1. Read the EMAIL BODY carefully first! It often contains the main dispute details (amount, account number, date).\n"
+            "2. If ATTACHMENT AVAILABLE says YES, call the `pdf_extract` tool immediately to read it for supplementary evidence.\n"
+            "3. Combine and reconcile ALL information from BOTH the email body AND the PDF text to extract the structured fields.\n"
             "4. Output ONLY a single JSON object with NO markdown, NO backticks, NO explanation.\n\n"
             f"TEAM CONTEXT (expert team SOP):\n{sop_context}\n\n"
             "EXTRACTION RULES:\n"
@@ -141,8 +141,8 @@ class IntakeAgent:
             "- account_number: Full 10-12 digit number, or last 4 digits if only partial given.\n"
             "- card_number: Full card number or last 4 digits. null if not mentioned.\n"
             "- nric: Malaysian format dddddd-dd-dddd. null if not found.\n"
-            "- amount: Numeric only, no RM or $, no commas. Extract from body or PDF.\n"
-            "- incident_date: YYYY-MM-DD format. null if not found.\n"
+            "- amount: Numeric only, no RM or $, no commas. Extract from BOTH the email body and PDF.\n"
+            "- incident_date: YYYY-MM-DD format. Extract from the email body or PDF. null if not found.\n"
             "- used_tools: List of tool names you called (e.g. [\"pdf_extract\"]) or [] if none.\n\n"
             f"REQUIRED OUTPUT FORMAT (JSON only):\n{_ENTITY_JSON_SCHEMA}"
         )
@@ -213,7 +213,7 @@ class IntakeAgent:
 
         system_prompt = (
             "You are an OCR/document-parsing agent for a banking dispute automation system.\n"
-            "Extract structured fields from the customer complaint email and any attached PDF text.\n"
+            "Extract structured fields from BOTH the customer complaint email body AND any attached PDF text.\n"
             "Think step-by-step, carefully identify Malaysian NRIC numbers, account numbers, and amounts.\n"
             "Remove 'RM' or '$' from amounts. Return ONLY valid JSON (no markdown, no backticks, no explanation).\n\n"
             "Fields to extract:\n"
