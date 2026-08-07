@@ -38,7 +38,7 @@ def _get_gemini_client():
             logger.error(f"[Copilot] generativeai fallback failed: {e2}")
             return None
 
-_GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+_GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-pro")
 
 
 def _build_context(cases: List[Case], overview: Dict[str, Any]) -> str:
