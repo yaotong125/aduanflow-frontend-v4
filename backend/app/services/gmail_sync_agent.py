@@ -180,32 +180,30 @@ class GmailSyncAgent:
                             except Exception:
                                 pass
 
-                    # Deduplication check to prevent concurrent duplicate cases
+                    # Deduplication check — uses the OUTER session to avoid SQLite nested-session conflicts
                     try:
                         from backend.app.models.case import Case
                         from datetime import timedelta
-                        with Session(engine) as session:
-                            five_mins_ago = datetime.utcnow() - timedelta(minutes=5)
-                            existing_case = session.exec(
-                                select(Case)
-                                .where(Case.email_subject == subject)
-                                .where(Case.customer_email == from_email)
-                                .where(Case.received_at >= five_mins_ago)
-                            ).first()
-                            
-                            if existing_case:
-                                logger.info(f"[{self.agent_name}] Skipping duplicate case for {subject} from {from_email}")
-                                # Attempt to mark as read just in case the first process failed to do so
-                                try:
-                                    requests.post(
-                                        f"https://gmail.googleapis.com/gmail/v1/users/me/messages/{msg_id}/modify",
-                                        headers=headers,
-                                        json={"removeLabelIds": ["UNREAD"]},
-                                        timeout=5
-                                    )
-                                except Exception:
-                                    pass
-                                continue
+                        five_mins_ago = datetime.utcnow() - timedelta(minutes=5)
+                        existing_case = session.exec(
+                            select(Case)
+                            .where(Case.email_subject == subject)
+                            .where(Case.customer_email == from_email)
+                            .where(Case.received_at >= five_mins_ago)
+                        ).first()
+
+                        if existing_case:
+                            logger.info(f"[{self.agent_name}] Skipping duplicate: '{subject}' from {from_email}")
+                            try:
+                                requests.post(
+                                    f"https://gmail.googleapis.com/gmail/v1/users/me/messages/{msg_id}/modify",
+                                    headers=headers,
+                                    json={"removeLabelIds": ["UNREAD"]},
+                                    timeout=5
+                                )
+                            except Exception:
+                                pass
+                            continue
                     except Exception as dedup_err:
                         logger.error(f"[{self.agent_name}] Deduplication check failed: {dedup_err}")
 
@@ -413,6 +411,7 @@ class GmailSyncAgent:
                                 from_email = from_match.group(2).strip()
 
                         body_text = ""
+                        html_body = ""
                         attachments = []
                         if msg.is_multipart():
                             for part in msg.walk():
@@ -420,21 +419,23 @@ class GmailSyncAgent:
                                 fname = part.get_filename()
                                 if ctype == "text/plain" and not fname:
                                     try:
-                                        body_text = part.get_payload(decode=True).decode(part.get_content_charset() or "utf-8", errors="ignore")
-                                        break
+                                        candidate = part.get_payload(decode=True).decode(part.get_content_charset() or "utf-8", errors="ignore")
+                                        if candidate.strip():
+                                            body_text = candidate
                                     except Exception:
                                         continue
-                            # Second pass: collect attachments (PDF preferred) if body already filled
-                            for part in msg.walk():
-                                ctype = part.get_content_type()
-                                fname = part.get_filename()
-                                if fname:
-                                    payload = part.get_payload(decode=True)
-                                    if payload:
+                                elif ctype == "text/html" and not fname and not body_text:
+                                    try:
+                                        html_body = part.get_payload(decode=True).decode(part.get_content_charset() or "utf-8", errors="ignore")
+                                    except Exception:
+                                        pass
+                                elif fname:
+                                    payload_bytes = part.get_payload(decode=True)
+                                    if payload_bytes:
                                         attachments.append({
                                             "filename": fname,
                                             "mimeType": ctype,
-                                            "content_bytes": payload,
+                                            "content_bytes": payload_bytes,
                                         })
                         else:
                             try:
@@ -442,8 +443,20 @@ class GmailSyncAgent:
                             except Exception:
                                 body_text = str(msg.get_payload())
 
+                        # If only HTML was found, clean it properly like the OAuth path
+                        if not body_text and html_body:
+                            import html as _html
+                            html_body = re.sub(r'<style[^>]*>.*?</style>', ' ', html_body, flags=re.DOTALL | re.IGNORECASE)
+                            html_body = re.sub(r'<script[^>]*>.*?</script>', ' ', html_body, flags=re.DOTALL | re.IGNORECASE)
+                            html_body = re.sub(r'<head[^>]*>.*?</head>', ' ', html_body, flags=re.DOTALL | re.IGNORECASE)
+                            html_body = re.sub(r'<[^>]+>', ' ', html_body)
+                            html_body = _html.unescape(html_body)
+                            html_body = re.sub(r'[ \t]+', ' ', html_body)
+                            html_body = re.sub(r'\n\s*\n', '\n\n', html_body).strip()
+                            body_text = html_body
+
                         if not body_text:
-                            body_text = "Complaint body content."
+                            body_text = msg.get("Subject", "Complaint email received.")
 
                         # Filter genuine banking disputes
                         if not classification_service.is_actual_dispute(from_email, subject, body_text):
@@ -458,13 +471,13 @@ class GmailSyncAgent:
                             email_subject=subject,
                             sender_name=sender_name,
                             attachments=attachments,
-                            fallback_amount=1500.00,
+                            fallback_amount=0.0,
                         )
                         entities = intake["entities"]
                         customer_name = entities["customer_name"]
-                        account_no = entities["account_number"] or "114002938471"
-                        card_no = entities["card_number"]
-                        nric_val = entities["nric"] or "930214-08-5193"
+                        account_no = entities.get("account_number") or ""
+                        card_no = entities.get("card_number")
+                        nric_val = entities.get("nric") or ""
                         amount_val = entities["amount"]
 
                         # 5-Stage AI Pipeline
