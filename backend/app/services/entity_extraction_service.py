@@ -77,8 +77,20 @@ class EntityExtractionService:
 
     def _regex_fallback(self, email_body: str, sender_name: str, fallback_amount: float) -> dict:
         import re
-        acc_match = re.search(r'\b\d{10,12}\b', email_body) or re.search(
-            r'ending\s+(?:in\s+)?(?::)?\s*(\d{4})', email_body, re.IGNORECASE)
+        # Try full account number first (10-12 contiguous digits)
+        full_acc_match = re.search(r'\b(\d{10,12})\b', email_body)
+        # Try "ending XXXX" / "card ending XXXX" pattern for partial accounts
+        partial_acc_match = re.search(
+            r'(?:ending|card ending|a/c ending)\s+(?:in\s+)?(?::)?\s*(\d{4})', email_body, re.IGNORECASE
+        )
+        if full_acc_match:
+            account_number = full_acc_match.group(1)
+        elif partial_acc_match:
+            # Store as "****XXXX" so masking produces the correct format
+            account_number = partial_acc_match.group(1)
+        else:
+            account_number = None
+
         nric_match = re.search(r'\b\d{6}-\d{2}-\d{4}\b', email_body)
         amt_match = re.search(r'(?:RM|\$)\s*([\d,]+(?:\.\d{2})?)', email_body, re.IGNORECASE)
         amount = fallback_amount
@@ -90,11 +102,12 @@ class EntityExtractionService:
         date_match = re.search(r'\b(\d{1,2}\s+[A-Za-z]+\s+\d{4})\b', email_body)
         return {
             "customer_name": sender_name,
-            "account_number": acc_match.group(1) if acc_match and acc_match.groups() else (acc_match.group(0) if acc_match else None),
+            "account_number": account_number,
             "nric": nric_match.group(0) if nric_match else None,
             "amount": amount,
             "incident_date": date_match.group(1) if date_match else None,
         }
+
 
     def _defaults(self, sender_name: str, fallback_amount: float) -> dict:
         return {

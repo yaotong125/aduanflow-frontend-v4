@@ -23,8 +23,8 @@ class IntakeAgent:
 
     AGENT_NAME = "ingestion-security-agent"
 
-    def _tool_pdf_extract(self, attachment_bytes: bytes = b"", filename: str = "") -> str:
-        """pdf_extract(attachment: bytes) -> str. Extract text from a PDF attachment (bank statement / evidence)."""
+    def pdf_extract(self, attachment_bytes: bytes = b"", filename: str = "") -> str:
+        """Extract text from a PDF attachment (bank statement or evidence document)."""
         text = pdf_text_from_bytes(attachment_bytes)
         if not text:
             return "PDF contained no extractable text (may be a scanned image; OCR unavailable) or file was empty."
@@ -32,14 +32,14 @@ class IntakeAgent:
 
     def build_tool_catalog(self) -> List[Callable]:
         """Return the python callables exposed to the LLM as tools."""
-        return [self._tool_pdf_extract]
+        return [self.pdf_extract]
 
     def _execute_tool(self, name: str, args: dict) -> str:
         """Dispatch an LLM-requested tool call to the matching implementation."""
-        if name == "_tool_pdf_extract":
+        if name in ("pdf_extract", "_tool_pdf_extract"):  # accept both names defensively
             pdf_bytes = args.get("attachment_bytes") or args.get("attachment") or b""
             filename = args.get("filename", "")
-            return self._tool_pdf_extract(pdf_bytes, filename)
+            return self.pdf_extract(pdf_bytes, filename)
         return f"Unknown tool '{name}'"
 
     def _security_scan(self, email_body: str, subject: str) -> Dict[str, Any]:
@@ -135,10 +135,10 @@ class IntakeAgent:
         # We need to pass pdf_bytes into the tool call. The model cannot pass binary;
         # we make it available to the tool via closure.
         def execute_tool(name, args):
-            if name == "_tool_pdf_extract":
-                used_tools.append(name)
+            if name in ("pdf_extract", "_tool_pdf_extract"):  # accept both names defensively
+                used_tools.append("pdf_extract")
                 # Force our captured bytes regardless of model-supplied dummy args.
-                return self._tool_pdf_extract(pdf_bytes, pdf_name)
+                return self.pdf_extract(pdf_bytes, pdf_name)
             return f"Unknown tool '{name}'"
 
         final_text = generate_content_with_tools(
@@ -236,7 +236,7 @@ class IntakeAgent:
 
     def _detect_used_tools(self, final_text) -> List[str]:
         if final_text and "pdf_extract" in final_text:
-            return ["_tool_pdf_extract"]
+            return ["pdf_extract"]
         return []
 
 

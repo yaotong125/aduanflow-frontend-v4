@@ -17,6 +17,7 @@ class IntakeRequest(BaseModel):
     email_subject: str
     email_body: str
     attachment_name: Optional[str] = None
+    card_number: Optional[str] = None
 
 @router.post("", response_model=CaseRead)
 def submit_complaint(payload: IntakeRequest, session: Session = Depends(get_session)):
@@ -29,10 +30,12 @@ def submit_complaint(payload: IntakeRequest, session: Session = Depends(get_sess
         amount=payload.amount,
         email_subject=payload.email_subject,
         email_body=payload.email_body,
-        attachment_name=payload.attachment_name
+        attachment_name=payload.attachment_name,
+        card_number=payload.card_number,
     )
     
     session.add(case_obj)
     session.commit()
     session.refresh(case_obj)
     return case_obj
+

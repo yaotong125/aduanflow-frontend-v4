@@ -47,6 +47,7 @@ class VerificationService:
             return ai
 
         amount = case_data.get("amount", 0.0)
+        category = case_data.get("category", "")
         text = (case_data.get("email_body") or "").lower()
 
         checks: List[Dict[str, Any]] = [
@@ -54,23 +55,57 @@ class VerificationService:
             {"check": "Transaction records exist in Core Banking", "passed": True},
             {"check": "Dispute amount matches transaction log", "passed": True},
         ]
-        
+
         evidence_refs = ["TXN-CORE-LOG-2026", "CRM-VERIFY-PASS"]
         result = "PASS"
         manual_reason = None
 
-        if "johor" in text and "kuala lumpur" in text:
-            # Location discrepancy triggers manual review
+        # ── High-risk category check ──────────────────────────────────────────
+        # Unauthorized/ATM disputes must never be auto-PASS without AI confirmation;
+        # they require MCP verification which is unavailable in fallback mode.
+        HIGH_RISK_CATEGORIES = {"unauthorized_transactions", "atm_debit_card_disputes"}
+        if category in HIGH_RISK_CATEGORIES:
+            result = "MANUAL_REVIEW"
+            checks.append({
+                "check": "High-risk category — AI verification unavailable",
+                "passed": False,
+                "detail": f"Category '{category}' requires core banking MCP check; falling back to manual review."
+            })
+            evidence_refs = ["MANUAL-REVIEW-FLAG", "AI-UNAVAILABLE"]
+            manual_reason = (
+                f"Category '{category}' cannot be auto-resolved without AI verification. "
+                "MCP core banking check unavailable — escalating to investigator."
+            )
+
+        # ── Fraud keyword signals ─────────────────────────────────────────────
+        elif any(kw in text for kw in [
+            "fraud", "stolen", "not me", "i did not", "unauthorized", "unauthorised",
+            "hacked", "compromised", "someone else", "i never made", "i didn't make",
+        ]):
+            result = "MANUAL_REVIEW"
+            checks.append({
+                "check": "Fraud keyword signal detected in complaint body",
+                "passed": False,
+                "detail": "Customer language indicates potential fraudulent transaction; escalating."
+            })
+            evidence_refs = ["FRAUD-KEYWORD-SIGNAL", "MANUAL-REVIEW-FLAG"]
+            manual_reason = "Fraud signals detected in complaint text. Requires investigator review before resolution."
+
+        # ── Location inconsistency ────────────────────────────────────────────
+        elif "johor" in text and "kuala lumpur" in text:
             result = "MANUAL_REVIEW"
             checks.append({"check": "Customer location consistency check", "passed": False, "detail": "Login in KL at 2:50 AM, ATM withdrawal in JB at 3:15 AM"})
             checks.append({"check": "CCTV Footage Verification", "passed": None, "detail": "Awaiting CCTV footage from ATM branch"})
             evidence_refs = ["ATM-JB-LOG", "MOBILE-LOGIN-KL"]
             manual_reason = "Location discrepancy between mobile app login and physical card transaction. Possible card skimming."
+
+        # ── High-value threshold ──────────────────────────────────────────────
         elif amount > 5000:
-            # Large dispute amount triggers manual review
             result = "MANUAL_REVIEW"
             checks.append({"check": "High-value transaction threshold", "passed": False, "detail": "Amount exceeds RM 5,000 automated approval limit"})
             manual_reason = "Transaction amount exceeds RM 5,000 limit for automated resolution."
+
+        # ── Safe to auto-resolve ──────────────────────────────────────────────
         else:
             checks.append({"check": "No prior dispute filed on transaction", "passed": True})
             checks.append({"check": "Merchant settlement logs confirmed", "passed": True})
@@ -81,6 +116,7 @@ class VerificationService:
             "evidenceRefs": evidence_refs,
             "manualReviewReason": manual_reason
         }
+
 
 verification_service = VerificationService()
 

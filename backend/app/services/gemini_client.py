@@ -171,6 +171,9 @@ def generate_content_with_tools(
             break
 
         function_calls = []
+        if not response.candidates:
+            logger.warning("[Gemini] tool-turn response has no candidates (safety filter or empty response). Breaking loop.")
+            break
         for part in response.candidates[0].content.parts:
             if part.function_call is not None:
                 function_calls.append(part.function_call)
