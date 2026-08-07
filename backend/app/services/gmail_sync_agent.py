@@ -156,6 +156,7 @@ class GmailSyncAgent:
                     subject = "Complaint Email"
                     from_email = target_email
                     sender_name = "Customer"
+                    email_date = None
 
                     for h in headers_list:
                         h_name = h.get("name", "").lower()
@@ -170,6 +171,14 @@ class GmailSyncAgent:
                                 from_email = from_match.group(2).strip()
                             else:
                                 from_email = re.sub(r'[<>\s"]', '', raw_from)
+                        elif h_name == "date":
+                            try:
+                                import email.utils
+                                parsed_tuple = email.utils.parsedate_tz(h.get("value", ""))
+                                if parsed_tuple:
+                                    email_date = datetime.utcfromtimestamp(email.utils.mktime_tz(parsed_tuple))
+                            except Exception:
+                                pass
 
                     # Extract Body and Attachments
                     body_text = ""
@@ -256,6 +265,7 @@ class GmailSyncAgent:
                         email_body=body_text,
                         attachment_name="Complaint_Evidence.pdf",
                         card_number=card_no,
+                        received_at=email_date,
                     )
                     session.add(case_obj)
 

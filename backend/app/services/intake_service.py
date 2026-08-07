@@ -56,7 +56,8 @@ class IntakeService:
         email_subject: str,
         email_body: str,
         attachment_name: Optional[str] = None,
-        card_number: Optional[str] = None
+        card_number: Optional[str] = None,
+        received_at: Optional[datetime] = None
     ) -> Case:
         """
         Processes complaint intake through the 5-stage AI expert pipeline:
@@ -179,7 +180,8 @@ class IntakeService:
                 communication["outboundDispatchError"] = str(e)
 
         # 5. Audit Trail Construction — 5-Stage AI Expert Pipeline Trace
-        now_ts = datetime.utcnow().strftime("%H:%M:%S")
+        # Use Malaysia Time (UTC+8) for the audit logs display
+        now_ts = (datetime.utcnow() + timedelta(hours=8)).strftime("%Y-%m-%d %H:%M:%S")
         audit_log = [
             {
                 "time": now_ts,
@@ -246,7 +248,7 @@ class IntakeService:
             verification_result=v_result,
             amount=amount,
             assigned_to="Agent-Auto" if v_result == "PASS" else None,
-            received_at=datetime.utcnow(),
+            received_at=received_at or datetime.utcnow(),
             due_date=due_date,
             processing_time="2m 30s" if v_result == "PASS" else "—",
             email_subject=email_subject,
