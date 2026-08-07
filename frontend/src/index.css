@@ -35,4 +35,20 @@
   .text-balance {
     text-wrap: balance;
   }
+
+  /* Smooth page transition fade-in */
+  .animate-fadeIn {
+    animation: fadeInPage 0.2s ease-out both;
+  }
+}
+
+@keyframes fadeInPage {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }

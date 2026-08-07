@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { apiFetch } from './config';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import LoginPage from './components/LoginPage';
@@ -155,12 +155,42 @@ function DashboardView() {
     if (params.has('oauth_cancelled') || params.has('oauth_success') || params.has('oauth_error')) {
       return 'settings';
     }
-    return 'dashboard';
+    // Restore page from browser history state if available
+    const histState = window.history.state;
+    return histState?.page || 'dashboard';
   });
-  const [selectedCaseId, setSelectedCaseId] = useState(null);
+  const [selectedCaseId, setSelectedCaseId] = useState(() => window.history.state?.caseId || null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [sourcePage, setSourcePage] = useState('dashboard');
+  const [sourcePage, setSourcePage] = useState(() => window.history.state?.sourcePage || 'dashboard');
   const [cases, setCases] = useState([]);
+  const [pageKey, setPageKey] = useState(0); // used to trigger fade animation
+  const isPopState = useRef(false);
+
+  // Push a new history entry on page change
+  const pushHistory = useCallback((page, caseId = null, source = null) => {
+    const state = { page, caseId, sourcePage: source };
+    window.history.pushState(state, '', window.location.pathname);
+  }, []);
+
+  // Handle browser back/forward button
+  useEffect(() => {
+    const onPopState = (e) => {
+      if (!e.state) return;
+      isPopState.current = true;
+      setCurrentPage(e.state.page || 'dashboard');
+      setSelectedCaseId(e.state.caseId || null);
+      setSourcePage(e.state.sourcePage || 'dashboard');
+      setPageKey(k => k + 1);
+      isPopState.current = false;
+    };
+    window.addEventListener('popstate', onPopState);
+    // Seed the initial history entry so back doesn't exit the app
+    if (!window.history.state) {
+      window.history.replaceState({ page: currentPage, caseId: selectedCaseId, sourcePage }, '', window.location.pathname);
+    }
+    return () => window.removeEventListener('popstate', onPopState);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const fetchCases = useCallback(() => {
     apiFetch('/api/cases')
@@ -189,14 +219,19 @@ function DashboardView() {
     setCurrentPage(page);
     setSelectedCaseId(caseId);
     setSidebarOpen(false);
-  }, []);
+    setPageKey(k => k + 1);
+    pushHistory(page, caseId, sourcePage);
+  }, [pushHistory, sourcePage]);
 
   const goToOverlay = useCallback(
     (page) => {
-      setSourcePage(currentPage === 'caseDetail' ? 'cases' : currentPage);
+      const src = currentPage === 'caseDetail' ? 'cases' : currentPage;
+      setSourcePage(src);
       setCurrentPage(page);
+      setPageKey(k => k + 1);
+      pushHistory(page, selectedCaseId, src);
     },
-    [currentPage]
+    [currentPage, selectedCaseId, pushHistory]
   );
 
   const getBreadcrumbs = () => {
@@ -318,7 +353,12 @@ function DashboardView() {
           setSidebarOpen={setSidebarOpen}
         />
 
-        <div className="p-4 md:p-6 mx-auto max-w-7xl">{renderPage()}</div>
+        <div
+          key={pageKey}
+          className="p-4 md:p-6 mx-auto max-w-7xl animate-fadeIn"
+        >
+          {renderPage()}
+        </div>
       </main>
     </div>
   );
