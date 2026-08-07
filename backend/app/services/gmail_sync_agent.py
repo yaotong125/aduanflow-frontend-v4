@@ -192,6 +192,10 @@ class GmailSyncAgent:
                             if part_mime == "text/plain" and "data" in part_body:
                                 if not body_text:
                                     body_text = base64.urlsafe_b64decode(part_body["data"]).decode("utf-8", errors="ignore")
+                            elif part_mime == "text/html" and "data" in part_body and not body_text:
+                                html_raw = base64.urlsafe_b64decode(part_body["data"]).decode("utf-8", errors="ignore")
+                                import re
+                                body_text = re.sub(r'<[^>]+>', ' ', html_raw)
                             elif part_mime == "application/pdf" or str(part.get("filename", "")).lower().endswith(".pdf"):
                                 attachment_id = part_body.get("attachmentId")
                                 if attachment_id:
@@ -222,6 +226,12 @@ class GmailSyncAgent:
 
                     if not body_text:
                         body_text = msg_detail.get("snippet", "Complaint body content.")
+                    else:
+                        import re
+                        # Clean up any residual HTML tags for the AI
+                        body_text = re.sub(r'<[^>]+>', ' ', body_text)
+                        # Clean up multiple spaces and newlines
+                        body_text = re.sub(r'\s+', ' ', body_text).strip()
 
                     # Determine whether this is a genuine banking dispute case first
                     if not classification_service.is_actual_dispute(from_email, subject, body_text):
