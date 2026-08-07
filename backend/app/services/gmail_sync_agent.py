@@ -180,6 +180,35 @@ class GmailSyncAgent:
                             except Exception:
                                 pass
 
+                    # Deduplication check to prevent concurrent duplicate cases
+                    try:
+                        from backend.app.models.case import Case
+                        from datetime import timedelta
+                        with Session(engine) as session:
+                            five_mins_ago = datetime.utcnow() - timedelta(minutes=5)
+                            existing_case = session.exec(
+                                select(Case)
+                                .where(Case.email_subject == subject)
+                                .where(Case.customer_email == from_email)
+                                .where(Case.received_at >= five_mins_ago)
+                            ).first()
+                            
+                            if existing_case:
+                                logger.info(f"[{self.agent_name}] Skipping duplicate case for {subject} from {from_email}")
+                                # Attempt to mark as read just in case the first process failed to do so
+                                try:
+                                    requests.post(
+                                        f"https://gmail.googleapis.com/gmail/v1/users/me/messages/{msg_id}/modify",
+                                        headers=headers,
+                                        json={"removeLabelIds": ["UNREAD"]},
+                                        timeout=5
+                                    )
+                                except Exception:
+                                    pass
+                                continue
+                    except Exception as dedup_err:
+                        logger.error(f"[{self.agent_name}] Deduplication check failed: {dedup_err}")
+
                     # Extract Body and Attachments
                     body_text = ""
                     attachments = []
