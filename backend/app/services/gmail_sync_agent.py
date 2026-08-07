@@ -228,8 +228,15 @@ class GmailSyncAgent:
                         body_text = msg_detail.get("snippet", "Complaint body content.")
                     else:
                         import re
-                        # Clean up any residual HTML tags for the AI
+                        import html
+                        # Remove style, script, and head blocks completely (avoid leaving raw CSS for the AI)
+                        body_text = re.sub(r'<style[^>]*>.*?</style>', ' ', body_text, flags=re.DOTALL | re.IGNORECASE)
+                        body_text = re.sub(r'<script[^>]*>.*?</script>', ' ', body_text, flags=re.DOTALL | re.IGNORECASE)
+                        body_text = re.sub(r'<head[^>]*>.*?</head>', ' ', body_text, flags=re.DOTALL | re.IGNORECASE)
+                        # Clean up any residual HTML tags
                         body_text = re.sub(r'<[^>]+>', ' ', body_text)
+                        # Unescape HTML entities like &nbsp;
+                        body_text = html.unescape(body_text)
                         # Clean up multiple spaces and newlines
                         body_text = re.sub(r'\s+', ' ', body_text).strip()
 
